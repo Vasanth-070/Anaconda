@@ -6,6 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		01A433743084AB0B0098EA97 /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 01A433733084AB0B0098EA97 /* Core */; };
+		01A433773084AB1A0098EA97 /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 01A433763084AB1A0098EA97 /* Features */; };
+		01A4337A3084AB280098EA97 /* Networking in Frameworks */ = {isa = PBXBuildFile; productRef = 01A433793084AB280098EA97 /* Networking */; };
+		01A4337D3084AB390098EA97 /* Persistence in Frameworks */ = {isa = PBXBuildFile; productRef = 01A4337C3084AB390098EA97 /* Persistence */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		01A433563084A7620098EA97 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +59,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				01A4337D3084AB390098EA97 /* Persistence in Frameworks */,
+				01A4337A3084AB280098EA97 /* Networking in Frameworks */,
+				01A433743084AB0B0098EA97 /* Core in Frameworks */,
+				01A433773084AB1A0098EA97 /* Features in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +123,10 @@
 			);
 			name = Anaconda;
 			packageProductDependencies = (
+				01A433733084AB0B0098EA97 /* Core */,
+				01A433763084AB1A0098EA97 /* Features */,
+				01A433793084AB280098EA97 /* Networking */,
+				01A4337C3084AB390098EA97 /* Persistence */,
 			);
 			productName = Anaconda;
 			productReference = 01A433483084A7610098EA97 /* Anaconda.app */;
@@ -195,6 +210,12 @@
 			);
 			mainGroup = 01A4333F3084A7610098EA97;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				01A433723084AB0B0098EA97 /* XCLocalSwiftPackageReference "../Packages/Core" */,
+				01A433753084AB1A0098EA97 /* XCLocalSwiftPackageReference "../Packages/Features" */,
+				01A433783084AB280098EA97 /* XCLocalSwiftPackageReference "../Packages/Networking" */,
+				01A4337B3084AB390098EA97 /* XCLocalSwiftPackageReference "../Packages/Persistence" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 01A433493084A7610098EA97 /* Products */;
 			projectDirPath = "";
@@ -570,6 +591,44 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		01A433723084AB0B0098EA97 /* XCLocalSwiftPackageReference "../Packages/Core" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/Core;
+		};
+		01A433753084AB1A0098EA97 /* XCLocalSwiftPackageReference "../Packages/Features" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/Features;
+		};
+		01A433783084AB280098EA97 /* XCLocalSwiftPackageReference "../Packages/Networking" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/Networking;
+		};
+		01A4337B3084AB390098EA97 /* XCLocalSwiftPackageReference "../Packages/Persistence" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../Packages/Persistence;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		01A433733084AB0B0098EA97 /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+		};
+		01A433763084AB1A0098EA97 /* Features */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Features;
+		};
+		01A433793084AB280098EA97 /* Networking */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Networking;
+		};
+		01A4337C3084AB390098EA97 /* Persistence */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Persistence;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 01A433403084A7610098EA97 /* Project object */;
 }
