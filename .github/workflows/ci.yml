@@ -1,0 +1,27 @@
+name: CI
+
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode Select
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
+      - name: Test Core
+        run: swift test
+        working-directory: Packages/Core
+      - name: Test Features
+        run: swift test
+        working-directory: Packages/Features
+      - name: Test Networking
+        run: swift test
+        working-directory: Packages/Networking
+      - name: Test Persistence
+        run: swift test
+        working-directory: Packages/Persistence
