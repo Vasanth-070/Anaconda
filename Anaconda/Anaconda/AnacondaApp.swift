@@ -9,8 +9,6 @@ import SwiftUI
 
 @main
 struct AnacondaApp: App {
-  private let testing = 1
-  private let testing = 2
     var body: some Scene {
         WindowGroup {
             ContentView()
