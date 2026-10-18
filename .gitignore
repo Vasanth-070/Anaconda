@@ -1,0 +1,5 @@
+.claude*
+xcuserdata/
+.DS_Store
+.build/
+DerivedData/
