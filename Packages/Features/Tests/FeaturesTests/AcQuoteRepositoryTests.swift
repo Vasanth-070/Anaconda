@@ -5,9 +5,9 @@ final class AcQuoteRepositoryTests: XCTestCase {
   private func makeSUT(
     cached: CachedQuote?,
     api: Result<Quote, QuoteError>
-  ) -> (sut: AcQuoteRepository, api: StubAPIClient, cache: FakeCache) {
+  ) -> (sut: AcQuoteRepository, api: StubAPIClient, cache: SpyCache) {
     let apiClient = StubAPIClient(result: api)
-    let cache = FakeCache(entry: cached)
+    let cache = SpyCache(entry: cached)
     return (AcQuoteRepository(api: apiClient, cache: cache), apiClient, cache)
   }
 
@@ -105,5 +105,21 @@ final class AcQuoteRepositoryTests: XCTestCase {
     XCTAssertEqual(error, .offline)
     let stored = await cache.storedQuotes
     XCTAssertTrue(stored.isEmpty)
+  }
+
+  /// Real cache + FakeClock: proves store-then-find works end to end, which SpyCache cannot.
+  func test_find_twiceWithinTTL_secondCallServedFromCacheWithoutAPI() async {
+    let api = StubAPIClient(result: .success(.sample(price: 150)))
+    let cache = InMemoryQuoteCache(clock: FakeClock())
+    let sut = AcQuoteRepository(api: api, cache: cache)
+
+    _ = await sut.find(for: "AAPL")
+    let second = await sut.find(for: "AAPL")
+
+    guard case .success(let value) = second else { return XCTFail("expected success, got \(second)") }
+    XCTAssertEqual(value.data.price, 150)
+    XCTAssertEqual(value.status, .hit)
+    let calls = await api.callCount
+    XCTAssertEqual(calls, 1)
   }
 }

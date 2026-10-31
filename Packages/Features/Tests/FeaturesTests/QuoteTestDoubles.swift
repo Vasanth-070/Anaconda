@@ -18,8 +18,10 @@ actor StubAPIClient: QuoteAPIClient {
   }
 }
 
-/// Cache whose freshness is decided by the test, and which records what was stored.
-actor FakeCache: QuoteCache {
+/// Stub + spy: `find` returns the entry the test chose (so freshness is forced, not computed),
+/// and `store` only records. It holds no state. For real store-then-find behaviour use
+/// `InMemoryQuoteCache` with `FakeClock`.
+actor SpyCache: QuoteCache {
   private let entry: CachedQuote?
   private(set) var storedQuotes: [Quote] = []
 

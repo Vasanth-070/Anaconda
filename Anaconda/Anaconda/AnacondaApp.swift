@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-
+import Features
 @main
 struct AnacondaApp: App {
     var body: some Scene {
