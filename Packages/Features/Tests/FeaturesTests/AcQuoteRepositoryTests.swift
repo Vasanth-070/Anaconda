@@ -1,9 +1,10 @@
 import XCTest
+import Persistence
 @testable import Features
 
 final class AcQuoteRepositoryTests: XCTestCase {
   private func makeSUT(
-    cached: CachedQuote?,
+    cached: CachedValue<Quote>?,
     api: Result<Quote, QuoteError>
   ) -> (sut: AcQuoteRepository, api: StubAPIClient, cache: SpyCache) {
     let apiClient = StubAPIClient(result: api)
@@ -13,7 +14,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
   func test_find_freshCacheHit_returnsHitWithoutCallingAPI() async {
     let (sut, api, cache) = makeSUT(
-      cached: CachedQuote(quote: .sample(price: 100), isFresh: true),
+      cached: CachedValue(value: .sample(price: 100), isFresh: true),
       api: .success(.sample(price: 999))
     )
 
@@ -44,7 +45,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
   func test_find_staleCache_apiSuccess_returnsFreshQuoteAndRefreshesCache() async {
     let (sut, _, cache) = makeSUT(
-      cached: CachedQuote(quote: .sample(price: 100), isFresh: false),
+      cached: CachedValue(value: .sample(price: 100), isFresh: false),
       api: .success(.sample(price: 150))
     )
 
@@ -59,7 +60,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
   func test_find_staleCache_apiFailure_returnsStaleQuote() async {
     let (sut, _, cache) = makeSUT(
-      cached: CachedQuote(quote: .sample(price: 100), isFresh: false),
+      cached: CachedValue(value: .sample(price: 100), isFresh: false),
       api: .failure(.connection)
     )
 
@@ -74,7 +75,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
   func test_find_staleCache_symbolNotFound_stillReturnsStaleQuote() async {
     let (sut, _, _) = makeSUT(
-      cached: CachedQuote(quote: .sample(price: 100), isFresh: false),
+      cached: CachedValue(value: .sample(price: 100), isFresh: false),
       api: .failure(.symbolNotFound)
     )
 
@@ -86,7 +87,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
   func test_find_staleCache_unauthorized_returnsFailureInsteadOfStale() async {
     let (sut, _, _) = makeSUT(
-      cached: CachedQuote(quote: .sample(price: 100), isFresh: false),
+      cached: CachedValue(value: .sample(price: 100), isFresh: false),
       api: .failure(.unauthorized)
     )
 
@@ -94,6 +95,18 @@ final class AcQuoteRepositoryTests: XCTestCase {
 
     guard case .failure(let error) = result else { return XCTFail("expected failure, got \(result)") }
     XCTAssertEqual(error, .unauthorized)
+  }
+
+  func test_find_staleCache_cancelled_returnsCancelledInsteadOfStale() async {
+    let (sut, _, _) = makeSUT(
+      cached: CachedValue(value: .sample(price: 100), isFresh: false),
+      api: .failure(.cancelled)
+    )
+
+    let result = await sut.find(for: "AAPL")
+
+    guard case .failure(let error) = result else { return XCTFail("expected failure, got \(result)") }
+    XCTAssertEqual(error, .cancelled)
   }
 
   func test_find_cacheMiss_apiFailure_returnsFailure() async {
@@ -110,7 +123,7 @@ final class AcQuoteRepositoryTests: XCTestCase {
   /// Real cache + FakeClock: proves store-then-find works end to end, which SpyCache cannot.
   func test_find_twiceWithinTTL_secondCallServedFromCacheWithoutAPI() async {
     let api = StubAPIClient(result: .success(.sample(price: 150)))
-    let cache = InMemoryQuoteCache(clock: FakeClock())
+    let cache = AcCache<Quote>(clock: FakeClock())
     let sut = AcQuoteRepository(api: api, cache: cache)
 
     _ = await sut.find(for: "AAPL")

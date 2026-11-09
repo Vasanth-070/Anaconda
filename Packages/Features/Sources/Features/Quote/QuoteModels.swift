@@ -7,13 +7,7 @@ struct Quote: Decodable {
 }
 
 enum QuoteError: Error {
-    case offline, connection, symbolNotFound, decoding, unauthorized, unknown
-}
-
-/// What the cache hands back: the quote plus whether it is still within its TTL.
-struct CachedQuote {
-    let quote: Quote
-    let isFresh: Bool
+    case offline, connection, symbolNotFound, decoding, unauthorized, cancelled, unknown
 }
 
 enum CacheStatus {
@@ -25,9 +19,3 @@ struct CacheResult {
     let status: CacheStatus
 }
 
-
-struct ACClock: ACClockProtocol {
-  var current: Date {
-    Date()
-  }
-}
