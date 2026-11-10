@@ -1,21 +1,21 @@
 import Foundation
 
-struct Quote: Decodable {
-    let symbol: String
-    let price: Double
-    let change: Double
+public struct Quote: Decodable, Sendable {
+    public let symbol: String
+    public let price: Double
+    public let change: Double
 }
 
-enum QuoteError: Error, Equatable {
+public enum QuoteError: Error, Equatable {
     case offline, connection, symbolNotFound, decoding, unauthorized, cancelled, unknown
 }
 
-enum CacheStatus {
+public enum CacheStatus: Sendable {
     case hit, stale
 }
 
-struct CacheResult {
-    let data: Quote
-    let status: CacheStatus
+public struct CacheResult: Sendable {
+    public let data: Quote
+    public let status: CacheStatus
 }
 

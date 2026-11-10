@@ -30,7 +30,7 @@ final class AcQuoteAPIClientTests: XCTestCase {
 
   private func makeSUT(outcome: StubHttpClient.Outcome) -> (sut: AcQuoteAPIClient, http: StubHttpClient) {
     let http = StubHttpClient(outcome: outcome)
-    return (AcQuoteAPIClient(http: http), http)
+    return (AcQuoteAPIClient(baseURL: URL(string: "https://example.test")!, http: http), http)
   }
 
   func test_fetch_status200_validJSON_returnsDecodedQuote() async {
@@ -135,6 +135,7 @@ final class AcQuoteAPIClientTests: XCTestCase {
     let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
     XCTAssertEqual(requests.count, 1)
     XCTAssertEqual(request.httpMethod, "GET")
+    XCTAssertEqual(request.url?.absoluteString, "https://example.test/quote?code=AAPL")
     XCTAssertEqual(components.queryItems, [URLQueryItem(name: "code", value: "AAPL")])
   }
 }

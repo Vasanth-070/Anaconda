@@ -1,11 +1,11 @@
 import Foundation
 
-enum QuoteAnalyticsEvent: Equatable, Sendable {
+public enum QuoteAnalyticsEvent: Equatable, Sendable {
   case loaded(symbol: String)
   case stale(symbol: String)
   case failed(symbol: String, error: QuoteError)
 }
 
-protocol AnalyticsTracker: Sendable {
+public protocol AnalyticsTracker: Sendable {
   func track(_ event: QuoteAnalyticsEvent)
 }

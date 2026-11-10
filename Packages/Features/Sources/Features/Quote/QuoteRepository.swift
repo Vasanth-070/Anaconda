@@ -9,16 +9,16 @@ import Foundation
 import Networking
 import Persistence
 
-final class AcQuoteRepository: QuoteRepository {
+public final class AcQuoteRepository: QuoteRepository {
   private let api: QuoteAPIClient
   private let cache: any Cache<Quote>
 
-  init(api: QuoteAPIClient, cache: any Cache<Quote>) {
+  public init(api: QuoteAPIClient, cache: any Cache<Quote>) {
     self.api = api
     self.cache = cache
   }
 
-  func find(for symbol: String) async -> Result<CacheResult, QuoteError> {
+  public func find(for symbol: String) async -> Result<CacheResult, QuoteError> {
     let cached = await cache.find(for: symbol)
     if let cached, cached.isFresh {
       return .success(CacheResult(data: cached.value, status: .hit))
@@ -40,17 +40,17 @@ final class AcQuoteRepository: QuoteRepository {
   }
 }
 
-final class AcQuoteAPIClient: QuoteAPIClient {
-  let endpoint = "/quote"
-  let host = "https://anaconda.com/"
+public final class AcQuoteAPIClient: QuoteAPIClient {
+  private let baseURL: URL
   let http: HttpClient
 
-  init(http: HttpClient) {
+  public init(baseURL: URL, http: HttpClient) {
+    self.baseURL = baseURL
     self.http = http
   }
 
-  func fetch(for symbol: String) async -> Result<Quote, QuoteError> {
-    var components = URLComponents(string: host + endpoint)
+  public func fetch(for symbol: String) async -> Result<Quote, QuoteError> {
+    var components = URLComponents(url: baseURL.appending(path: "quote"), resolvingAgainstBaseURL: false)
     components?.queryItems = [URLQueryItem(name: "code", value: symbol)]
 
     guard let url = components?.url else { return .failure(.unknown) }

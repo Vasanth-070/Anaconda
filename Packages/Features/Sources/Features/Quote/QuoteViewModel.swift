@@ -9,8 +9,8 @@ import Foundation
 import Observation
 
 @MainActor @Observable
-final class QuoteViewModel {
-  enum State {
+public final class QuoteViewModel {
+  public enum State {
     case idle
     case loading
     case loaded(Quote)
@@ -18,16 +18,16 @@ final class QuoteViewModel {
     case failed(QuoteError)
   }
 
-  private(set) var state: State = .idle
+  public private(set) var state: State = .idle
   private let repository: QuoteRepository
   private let analytics: AnalyticsTracker
 
-  init(repository: QuoteRepository, analytics: AnalyticsTracker) {
+  public init(repository: QuoteRepository, analytics: AnalyticsTracker) {
     self.repository = repository
     self.analytics = analytics
   }
 
-  func load(symbol: String) async {
+  public func load(symbol: String) async {
     state = .loading
     switch await repository.find(for: symbol) {
     case .success(let result):
