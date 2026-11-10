@@ -6,7 +6,7 @@ struct Quote: Decodable {
     let change: Double
 }
 
-enum QuoteError: Error {
+enum QuoteError: Error, Equatable {
     case offline, connection, symbolNotFound, decoding, unauthorized, cancelled, unknown
 }
 

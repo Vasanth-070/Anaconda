@@ -1,28 +1,14 @@
 import XCTest
 @testable import Features
 
-/// Returns a canned repository result and records which symbols were requested.
-private actor StubRepository: QuoteRepository {
-  private let result: Result<CacheResult, QuoteError>
-  private(set) var requestedSymbols: [String] = []
-
-  init(result: Result<CacheResult, QuoteError>) {
-    self.result = result
-  }
-
-  func find(for symbol: String) async -> Result<CacheResult, QuoteError> {
-    requestedSymbols.append(symbol)
-    return result
-  }
-}
-
 @MainActor
 final class QuoteViewModelTests: XCTestCase {
   private func makeSUT(
-    result: Result<CacheResult, QuoteError>
-  ) -> (sut: QuoteViewModel, repo: StubRepository) {
-    let repo = StubRepository(result: result)
-    return (QuoteViewModel(repository: repo), repo)
+    result: Result<CacheResult, QuoteError>,
+    analytics: AnalyticsTracker = DummyAnalyticsTracker()
+  ) -> (sut: QuoteViewModel, repo: StubQuoteRepository) {
+    let repo = StubQuoteRepository(result: result)
+    return (QuoteViewModel(repository: repo, analytics: analytics), repo)
   }
 
   func test_init_startsIdle() {
@@ -65,5 +51,32 @@ final class QuoteViewModelTests: XCTestCase {
 
     let symbols = await repo.requestedSymbols
     XCTAssertEqual(symbols, ["MSFT"])
+  }
+
+  func test_load_freshResult_tracksLoadedEvent() async {
+    let analytics = SpyAnalyticsTracker()
+    let (sut, _) = makeSUT(result: .success(CacheResult(data: .sample(), status: .hit)), analytics: analytics)
+
+    await sut.load(symbol: "AAPL")
+
+    XCTAssertEqual(analytics.events, [.loaded(symbol: "AAPL")])
+  }
+
+  func test_load_staleResult_tracksStaleEvent() async {
+    let analytics = SpyAnalyticsTracker()
+    let (sut, _) = makeSUT(result: .success(CacheResult(data: .sample(), status: .stale)), analytics: analytics)
+
+    await sut.load(symbol: "AAPL")
+
+    XCTAssertEqual(analytics.events, [.stale(symbol: "AAPL")])
+  }
+
+  func test_load_failure_tracksFailedEventWithError() async {
+    let analytics = SpyAnalyticsTracker()
+    let (sut, _) = makeSUT(result: .failure(.offline), analytics: analytics)
+
+    await sut.load(symbol: "AAPL")
+
+    XCTAssertEqual(analytics.events, [.failed(symbol: "AAPL", error: .offline)])
   }
 }

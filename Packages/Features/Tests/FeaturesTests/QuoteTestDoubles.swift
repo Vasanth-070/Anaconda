@@ -1,6 +1,7 @@
 import Core
 import Foundation
 import Persistence
+import XCTest
 @testable import Features
 
 /// Returns a canned result and counts calls, so tests can assert "API was / wasn't hit".
@@ -15,6 +16,52 @@ actor StubAPIClient: QuoteAPIClient {
 
   func fetch(for symbol: String) async -> Result<Quote, QuoteError> {
     callCount += 1
+    requestedSymbols.append(symbol)
+    return result
+  }
+}
+
+/// Mock: the test states the expectation up front ("fetch AAPL exactly N times") and
+/// `verify` fails the test if reality differs. A stub only answers; a mock judges.
+actor MockQuoteAPI: QuoteAPIClient {
+  private let result: Result<Quote, QuoteError>
+  private let expectedSymbol: String
+  private let expectedCalls: Int
+  private var symbols: [String] = []
+
+  init(
+    expectedSymbol: String,
+    expectedCalls: Int = 1,
+    result: Result<Quote, QuoteError> = .success(.sample())
+  ) {
+    self.expectedSymbol = expectedSymbol
+    self.expectedCalls = expectedCalls
+    self.result = result
+  }
+
+  func fetch(for symbol: String) async -> Result<Quote, QuoteError> {
+    symbols.append(symbol)
+    return result
+  }
+
+  func verify(file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(symbols.count, expectedCalls, "fetch call count", file: file, line: line)
+    XCTAssertTrue(
+      symbols.allSatisfy { $0 == expectedSymbol },
+      "expected only \(expectedSymbol), got \(symbols)", file: file, line: line)
+  }
+}
+
+/// Returns a canned repository result and records which symbols were requested.
+actor StubQuoteRepository: QuoteRepository {
+  private let result: Result<CacheResult, QuoteError>
+  private(set) var requestedSymbols: [String] = []
+
+  init(result: Result<CacheResult, QuoteError>) {
+    self.result = result
+  }
+
+  func find(for symbol: String) async -> Result<CacheResult, QuoteError> {
     requestedSymbols.append(symbol)
     return result
   }
@@ -40,6 +87,28 @@ actor SpyCache: Cache {
   func store(_ value: Quote, for key: String) async {
     storedQuotes.append(value)
   }
+}
+
+/// Records every event the code under test sends. `track` is synchronous, so this is a
+/// lock-guarded class rather than an actor.
+final class SpyAnalyticsTracker: AnalyticsTracker, @unchecked Sendable {
+  private let lock = NSLock()
+  private var recorded: [QuoteAnalyticsEvent] = []
+
+  var events: [QuoteAnalyticsEvent] {
+    lock.lock(); defer { lock.unlock() }
+    return recorded
+  }
+
+  func track(_ event: QuoteAnalyticsEvent) {
+    lock.lock(); defer { lock.unlock() }
+    recorded.append(event)
+  }
+}
+
+/// Dummy: fills a required parameter the test never looks at. No state, no assertions.
+struct DummyAnalyticsTracker: AnalyticsTracker {
+  func track(_ event: QuoteAnalyticsEvent) {}
 }
 
 /// One clock the test can move forward between a store and a read.

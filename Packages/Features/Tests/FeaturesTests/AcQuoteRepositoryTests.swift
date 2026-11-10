@@ -43,6 +43,16 @@ final class AcQuoteRepositoryTests: XCTestCase {
     XCTAssertEqual(stored.map(\.price), [150])
   }
 
+  /// Mock style: the expectation ("fetch AAPL exactly once") is set up front, `verify` judges.
+  func test_find_cacheMiss_fetchesRequestedSymbolExactlyOnce() async {
+    let api = MockQuoteAPI(expectedSymbol: "AAPL", expectedCalls: 1)
+    let sut = AcQuoteRepository(api: api, cache: SpyCache(entry: nil))
+
+    _ = await sut.find(for: "AAPL")
+
+    await api.verify()
+  }
+
   func test_find_staleCache_apiSuccess_returnsFreshQuoteAndRefreshesCache() async {
     let (sut, _, cache) = makeSUT(
       cached: CachedValue(value: .sample(price: 100), isFresh: false),

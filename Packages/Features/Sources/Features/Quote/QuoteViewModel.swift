@@ -20,9 +20,11 @@ final class QuoteViewModel {
 
   private(set) var state: State = .idle
   private let repository: QuoteRepository
+  private let analytics: AnalyticsTracker
 
-  init(repository: QuoteRepository) {
+  init(repository: QuoteRepository, analytics: AnalyticsTracker) {
     self.repository = repository
+    self.analytics = analytics
   }
 
   func load(symbol: String) async {
@@ -30,11 +32,16 @@ final class QuoteViewModel {
     switch await repository.find(for: symbol) {
     case .success(let result):
       switch result.status {
-      case .hit: state = .loaded(result.data)
-      case .stale: state = .stale(result.data)
+      case .hit:
+        state = .loaded(result.data)
+        analytics.track(.loaded(symbol: symbol))
+      case .stale:
+        state = .stale(result.data)
+        analytics.track(.stale(symbol: symbol))
       }
     case .failure(let error):
       state = .failed(error)
+      analytics.track(.failed(symbol: symbol, error: error))
     }
   }
 }
