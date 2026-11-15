@@ -1,6 +1,6 @@
-# Networking layer: token refresh
+# Networking layer design
 
-Status: draft (Day 17). Covers token refresh, interceptor chain, observability and mockability. Tests and write-up polish on Day 18.
+Status: draft (Days 17-18). Covers token refresh, interceptor chain, observability, mockability, app suspension, Keychain failure and session scope.
 
 ## Problem
 
@@ -21,25 +21,41 @@ Many requests are in flight with the same access token. The token expires, so th
 ## Sketch
 
 ```swift
-enum RefreshError: Error { case transient(Error), sessionExpired }
+enum RefreshError: Error { case transient(Error), sessionExpired, cancelled }
 
 actor TokenStore {
     private var token: Token
     private var inflight: Task<Token, Error>?
+    private var isTornDown = false
+    private var signedOut = false
+    private let refreshClient: RefreshClient      // separate chain, injected
+    private let keychain: TokenPersisting         // key includes the user id
 
     func refresh(failedWith old: Token) async throws -> Token {
+        if isTornDown || signedOut { throw RefreshError.cancelled }
         if token != old { return token }          // someone already refreshed
         if let t = inflight { return try await t.value }
-        let t = Task { try await api.refresh() }
+        // refreshClient maps errors: network -> .transient, explicit rejection -> .sessionExpired
+        let t = Task { try await refreshClient.refresh() }
         inflight = t                              // store BEFORE awaiting
         defer { inflight = nil }
-        token = try await t.value
-        return token
+        do {
+            let new = try await t.value
+            guard !isTornDown else { throw RefreshError.cancelled }
+            token = new                           // memory first
+            persistInBackground(new)              // detached, bounded retry, never blocks the return
+            return new
+        } catch RefreshError.sessionExpired {
+            signedOut = true
+            throw RefreshError.sessionExpired
+        }
     }
+
+    func tearDown() { isTornDown = true; inflight?.cancel() }
 }
 ```
 
-Waiters get the value from `t.value`, not from `token`, so they do not depend on when the first caller resumes.
+Waiters get the value from `t.value`, not from `token`, so they do not depend on when the first caller resumes. `persistInBackground` checks `isTornDown` before every Keychain write.
 
 ## Sequence diagram
 
@@ -66,9 +82,10 @@ sequenceDiagram
 
     alt refresh succeeds
         API-->>S: T2
-        Note over S: token = T2, inflight = nil
+        Note over S: token = T2 (memory), inflight = nil
         S-->>I: T2 (to A)
         S-->>I: T2 (to B)
+        Note over S: then persist T2 to Keychain<br/>(background, bounded retry)
         I->>API: A retry with T2 (once)
         I->>API: B retry with T2 (once)
         API-->>I: 200 (A, B)
@@ -85,6 +102,12 @@ sequenceDiagram
         S-->>I: RefreshError.sessionExpired
         I-->>A: fail + logout event
         I-->>B: fail + logout event
+    else user logs out while refresh is in flight
+        Note over S: tearDown(): isTornDown = true, inflight cancelled
+        S-->>I: RefreshError.cancelled
+        I-->>A: cancelled (not retried, not a failure)
+        I-->>B: cancelled (not retried, not a failure)
+        Note over S: late result is discarded,<br/>no Keychain write
     end
 
     Note over I,S: Late caller C (sent with T1, 401 arrives after refresh):<br/>token != T1, so retry with T2 directly, no new refresh
@@ -111,8 +134,13 @@ Refresh: logging → inner metric (tag: refresh) → transport
 | 401 | `refresh(failedWith:)`, retry once |
 | Timeout, offline blip, 5xx, 429 | Retry with backoff + jitter, up to N (honor `Retry-After` on 429) |
 | Other 4xx, decoding error | Terminal |
-| `sessionExpired` from refresh | Terminal, plus logout event |
+| Refresh rejected by the server (explicit `invalid_grant` / 401 from the refresh endpoint) | `sessionExpired`: terminal, plus logout event. Only an explicit server rejection means the session is dead |
+| Refresh fails with a network error (`networkConnectionLost`, timeout, offline, 5xx) | `transient`: fail the request, keep the session, never log out |
 | Cancellation | Terminal, not counted as a failure in metrics |
+
+Notes:
+- The two "Refresh ..." rows describe the refresh chain's result, not a main request. The main request that triggered the refresh then fails with the mapped error.
+- A 401 on the retry after a successful refresh is terminal: the request fails and does not refresh again.
 
 - One shared retry budget per request (one refresh-retry, N transient), so 401 → 503 → 401 cannot loop.
 - Idempotency: retry `GET` freely. Retry non-idempotent requests (`POST`, e.g. order tickets) only with an idempotency key, or when the request provably never reached the server.
@@ -138,7 +166,50 @@ protocol Interceptor {
 - **Race test:** main fake is stateful (401 for T1, 200 for T2). Refresh fake holds a continuation (a gate) released only after all N callers are waiting; otherwise tasks may run one after another and never overlap. Launch N callers with a `TaskGroup`. Assert: refresh called exactly once, all N succeed, main fake saw each request exactly twice.
 - **Late-caller test:** a 401 with T1 arriving after the refresh finished causes zero extra refreshes.
 
+## App suspension during refresh
+
+Scenario: a screen fires 3 requests with an expired token, refresh starts, and iOS suspends the app.
+
+- Suspension freezes tasks; they resume with the app. But a foreground `URLSession` request often does not survive: on resume it can fail with `networkConnectionLost` (-1005) or a timeout. The design handles both outcomes.
+- **Lost refresh response (the real bug):** the server may have rotated the token while the response never reached the app. The app still holds the spent refresh token, so the next refresh is rejected and a naive classifier logs the user out although nothing was wrong.
+- Mitigations:
+  - Wrap the refresh call and the Keychain write in `beginBackgroundTask` so iOS lets them finish.
+  - Memory first: set the token in memory, release the waiters, then persist to the Keychain (see Keychain write failure).
+  - Network errors during refresh are `transient`, never `sessionExpired` (see classifier).
+  - Ask the backend for a grace window (previous refresh token valid for a few seconds after rotation) or an idempotent refresh. This is the real fix and needs backend cooperation.
+  - Keychain accessibility: see Keychain write failure.
+
+## Keychain write failure
+
+The in-memory token is the source of truth; the Keychain only persists it for the next launch (restored on launch).
+
+- Order after a successful refresh: set memory, release the waiters, then persist.
+- A Keychain failure never fails or blocks requests.
+- Retry a transient Keychain error once or twice, then stop.
+- No user-facing prompts: the user cannot act on it usefully.
+- On final failure, record the error code in a metric or log (never the token) and carry on.
+- If the app is killed before persisting, the next launch restores the old, spent refresh token, the refresh is rejected, and the user sees the login screen. Accepted.
+- Keep the Keychain-failure rate as a metric: it is the only signal that users are being logged out for this reason.
+- Keychain items use `afterFirstUnlock`, so a refresh finishing while the device is locked can still read and write the token. This prevents the most common cause of a write failure.
+
+## Session scope (logout during refresh)
+
+Scenario: A and B get a 401, A's refresh starts, and the user logs out (or logs out and logs in as someone else) before it finishes. The late result must never reach the new session.
+
+- **App scope** (lives for the whole app run): `baseURL`, logging and metrics config, `URLSession` configuration, and the unauthenticated chain used by login, sign-up and the refresh call.
+- **User scope** (created at login, torn down at logout): `TokenStore`, the main interceptor chain, and the API clients built on them.
+- A stale refresh can only touch its own `TokenStore`, so object identity replaces a generation counter.
+- **Keychain is shared storage**, so a dead store could still clobber the new session. Two rules close this:
+  - The Keychain key includes the user id (`token.<userId>`), so an old store can only write to its own slot.
+  - Teardown cancels `inflight` and sets `isTornDown = true`. The store checks the flag before any Keychain write and throws `cancelled` if it is set.
+- Teardown must be explicit. Dropping the reference is not enough: a running `Task` keeps its captured `TokenStore` alive.
+- Waiters (B) get `cancelled`: not retried, not shown to the user, not counted as a failure in the metric.
+- Anything holding the old stack (view models, repositories) is rebuilt at login. Nothing at app scope may cache a user-scoped client.
+- The backend revokes the refresh token on logout, so a dropped refresh result is useless anyway.
+- Logs and metrics never contain the raw user id (see Observability); the Keychain key is the only place it appears.
+
 ## Open
 
+- Backend grace window for the previous refresh token: needs a decision with the backend team.
 - Backoff policy and N for transient retries: decide during implementation.
-- Failure paths beyond the three in the diagram: find while implementing.
+- Covered by pressure test: app suspension during refresh, logout during refresh, Keychain write failure. Further failure paths: find while implementing.
